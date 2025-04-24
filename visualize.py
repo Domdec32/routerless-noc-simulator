@@ -1,7 +1,8 @@
-import csv
+import csv 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.figure import Figure
+from collections import Counter
 
 def load_delivery_log(filename):
     with open(filename, "r") as f:
@@ -66,6 +67,23 @@ def get_per_packet_hops(deliveries):
     ax.grid(True, axis="y")
     return fig
 
+def get_deliveries_per_node(deliveries):
+    node_deliveries = Counter()
+    for row in deliveries:
+        dest = row["dest"]
+        node_deliveries[dest] += 1
+
+    nodes = sorted(node_deliveries.keys(), key=lambda x: int(x))
+    counts = [node_deliveries[n] for n in nodes]
+
+    fig = Figure(figsize=(5, 3))
+    ax = fig.add_subplot(111)
+    ax.bar(nodes, counts, color="goldenrod", edgecolor="black")
+    ax.set_title("Packets Received Per Node")
+    ax.set_xlabel("Node ID")
+    ax.set_ylabel("Packets Delivered")
+    ax.grid(True, axis="y")
+    return fig
 
 if __name__ == "__main__":
     deliveries = load_delivery_log("results/delivery_log.csv")
@@ -76,4 +94,3 @@ if __name__ == "__main__":
     plot_delivery_timeline(deliveries)
     plot_latency_cdf(deliveries)
     plot_per_packet_hops(deliveries)
-

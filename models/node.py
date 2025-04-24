@@ -9,6 +9,7 @@ class Node:
             self.metrics = metrics_collector
             self.neighbors = []
             self.routing_strategy = None
+            self.contention_event_scheduled = False
 
             if routing_strategy_cls:
                 self.routing_strategy = routing_strategy_cls(self)
@@ -23,10 +24,10 @@ class Node:
         def add_neighbor(self, neighbor_node):
             self.neighbors.append(neighbor_node)
 
-        def inject_packet(self, packet, delay=1):
+        def inject_packet(self, packet, delay=0):
             def store():
                 if len(self.injection_buffer) >= self.max_injection_buffer:
-                    print(f"[DROP] Node {self.node_id} dropped Packet {packet.packet_id} (injection buffer full)")
+                    #print(f"[Time {self.event_queue.current_time}] [DROP] Node {self.node_id} dropped Packet {packet.packet_id} (injection buffer full)")
                     if self.metrics:
                         self.metrics.record_packet_drop()
                     return
@@ -34,7 +35,7 @@ class Node:
                 self.injection_buffer.append(packet)
 
                 if len(self.input_buffer) + len(self.injection_buffer) == 1:
-                    self.event_queue.schedule(Event(self.event_queue.current_time + 1, self.resolve_contention, f"Resolve contention at Node {self.node_id}"))
+                    self.event_queue.schedule(Event(self.event_queue.current_time, self.resolve_contention, f"Resolve contention at Node {self.node_id}"))
 
             self.event_queue.schedule(Event(packet.creation_time + delay, store, f"Inject {packet}"))
 
@@ -42,7 +43,7 @@ class Node:
 
         def forward_packet(self, packet):
             if packet.dest == self.node_id:
-                print(f"[Node {self.node_id}] Received {packet} after {packet.hops} hops!")
+                #print(f"[Time {self.event_queue.current_time}] [Node {self.node_id}] Received {packet} after {packet.hops} hops!")
                 if self.metrics:
                     self.metrics.record_packet_delivery(packet, self.event_queue.current_time)
             else:
@@ -52,23 +53,29 @@ class Node:
                     next_node = self.neighbors[0]  
 
                 packet.hops += 1
-                print(f"[Node {self.node_id}] Forwarding {packet} to Node {next_node.node_id}")
+                #print(f"[Time {self.event_queue.current_time}] [Node {self.node_id}] Forwarding {packet} to Node {next_node.node_id}")
                 next_node.receive_packet(packet)
 
 
         def receive_packet(self, packet):
             if len(self.input_buffer) >= self.max_input_buffer:
-                print(f"[DROP] Node {self.node_id} dropped incoming Packet {packet.packet_id} (input buffer full)")
+                #print(f"[Time {self.event_queue.current_time}] [DROP] Node {self.node_id} dropped incoming Packet {packet.packet_id} (input buffer full)")
                 if self.metrics:
                     self.metrics.record_packet_drop()
                 return
 
             self.input_buffer.append(packet)
 
-            if len(self.input_buffer) + len(self.injection_buffer) == 1:
-                self.event_queue.schedule(Event(self.event_queue.current_time + 1, self.resolve_contention, f"Resolve contention at Node {self.node_id}"))
+            if not self.contention_event_scheduled:
+                self.event_queue.schedule(Event(
+                    self.event_queue.current_time + 1,
+                    self.resolve_contention,
+                    f"Resolve contention at Node {self.node_id}"
+                ))
+                self.contention_event_scheduled = True
 
         def resolve_contention(self):
+            self.contention_event_scheduled = False
             contenders = self.input_buffer + self.injection_buffer
 
             if not contenders:
@@ -81,13 +88,14 @@ class Node:
             alternate = self.neighbors[1] if len(self.neighbors) > 1 else None
 
             for i, packet in enumerate(contenders):
-                packet.hops += 1
-
+                
                 if packet.dest == self.node_id:
-                    print(f"[Node {self.node_id}] Received {packet} after {packet.hops} hops!")
+                    #print(f"[Time {self.event_queue.current_time}] [Node {self.node_id}] Received {packet} after {packet.hops} hops!")
                     if self.metrics:
                         self.metrics.record_packet_delivery(packet, self.event_queue.current_time)
                     continue
+                
+                packet.hops += 1
 
                 if i == 0:
                     next_node = preferred
@@ -95,12 +103,12 @@ class Node:
                     next_node = alternate
                     if self.metrics:
                         self.metrics.record_deflection()
-                    print(f"[Node {self.node_id}] Deflected Packet {packet.packet_id} to Node {next_node.node_id}")
+                    #print(f"[Time {self.event_queue.current_time}] [Node {self.node_id}] Deflected Packet {packet.packet_id} to Node {next_node.node_id}")
                 else:
-                    print(f"[Node {self.node_id}] WARNING: No route for Packet {packet.packet_id}")
+                    #print(f"[Node {self.node_id}] WARNING: No route for Packet {packet.packet_id}")
                     continue
 
-                print(f"[Node {self.node_id}] Forwarding {packet} to Node {next_node.node_id}")
+                #print(f"[Time {self.event_queue.current_time}] [Node {self.node_id}] Forwarding {packet} to Node {next_node.node_id}")
                 next_node.receive_packet(packet)
 
             

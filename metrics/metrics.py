@@ -9,7 +9,7 @@ class MetricsCollector:
         self.deflections = 0
         self.dropped_packets = 0
         self.log_deliveries = log_deliveries
-        self.delivery_log = [] if log_deliveries else None
+        self.delivery_log = [] if log_deliveries else []
 
     def record_packet_delivery(self, packet, current_time):
         latency = current_time - packet.creation_time

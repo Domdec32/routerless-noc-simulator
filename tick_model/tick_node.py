@@ -14,39 +14,37 @@ class TickNode:
     def add_neighbor(self, neighbor_node):
         self.neighbors.append(neighbor_node)
 
-    def inject_packet(self, packet):
+    def inject_packet(self, packet, current_tick):
         if len(self.injection_buffer) < self.max_injection_buffer:
             self.injection_buffer.append(packet)
         else:
             self.dropped += 1
+            #print(f"[TICK NODE {self.node_id}] Dropped packet {packet.packet_id} (injection buffer full)")
 
     def tick(self, current_tick):
         forwarding = []
-
-        
         for packet in self.input_buffer:
             if packet.dest == self.node_id:
                 self.delivered.append((packet, current_tick))
+                print(f"[TICK NODE {self.node_id}] Delivered packet {packet.packet_id} at tick {current_tick}")
             else:
                 forwarding.append(packet)
-
         self.input_buffer.clear()
 
-        
         if self.injection_buffer:
             forwarding.append(self.injection_buffer.pop(0))
 
-        
         for packet in forwarding:
-            next_node = None
             if self.routing_strategy:
                 next_node = self.routing_strategy.select_next_hop(packet)
-            elif self.neighbors:
-                next_node = self.neighbors[0]
+            else:
+                next_node = self.neighbors[0] if self.neighbors else None
 
             if next_node and len(next_node.input_buffer) < next_node.max_input_buffer:
-                next_node.input_buffer.append(packet)
                 packet.hops += 1
+                next_node.input_buffer.append(packet)
+                #print(f"[TICK NODE {self.node_id}] Forwarded packet {packet.packet_id} to node {next_node.node_id}")
             else:
                 self.deflections += 1
                 self.input_buffer.append(packet)
+                #print(f"[TICK NODE {self.node_id}] Deflected packet {packet.packet_id}")

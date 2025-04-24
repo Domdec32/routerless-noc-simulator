@@ -8,7 +8,8 @@ from visualize import (
     get_hop_histogram,
     get_latency_vs_hops,
     get_latency_cdf,
-    get_per_packet_hops
+    get_per_packet_hops,
+    get_deliveries_per_node
 )
 
 config = {}
@@ -25,13 +26,11 @@ right_panel = ttk.Frame(root)
 right_panel.grid(row=0, column=1, sticky="nsew", padx=20, pady=20)
 root.columnconfigure(1, weight=1)
 
-canvas = tk.Canvas(right_panel, height = 600)
+canvas = tk.Canvas(right_panel, height=600)
 scrollbar = ttk.Scrollbar(right_panel, orient="vertical", command=canvas.yview)
 scrollable_frame = ttk.Frame(canvas)
 
-scrollable_frame.bind(
-    "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
-)
+scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
 
 canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
 canvas.configure(yscrollcommand=scrollbar.set)
@@ -40,25 +39,45 @@ canvas.pack(side="left", fill="both", expand=True)
 scrollbar.pack(side="right", fill="y")
 
 fields = {
-    "num_nodes": ("Number of Nodes", tk.IntVar(value=6)),
-    "max_input_buffer": ("Max Input Buffer", tk.IntVar(value=2)),
-    "max_injection_buffer": ("Max Injection Buffer", tk.IntVar(value=2)),
-    "packet_rate": ("Packet Rate", tk.DoubleVar(value=1.0)),
-    "traffic_stop_time": ("Traffic Stop Time", tk.IntVar(value=10)),
-    "log_deliveries": ("Log Deliveries", tk.BooleanVar(value=True)),
+    "num_nodes": tk.IntVar(value=6),
+    "max_input_buffer": tk.IntVar(value=2),
+    "max_injection_buffer": tk.IntVar(value=2),
+    "packet_rate": tk.DoubleVar(value=1.0),
+    "traffic_stop_time": tk.IntVar(value=10),
+    "log_deliveries": tk.BooleanVar(value=True),
+    "size_small": tk.DoubleVar(value=0.5),
+    "size_medium": tk.DoubleVar(value=0.3),
+    "size_large": tk.DoubleVar(value=0.2)
 }
 
 routing_var = tk.StringVar(value="deflection")
+size_mode_var = tk.StringVar(value="custom")
+traffic_distribution_var = tk.StringVar(value="balanced")
+
 row = 0
-for key, (label, var) in fields.items():
-    ttk.Label(left_panel, text=label).grid(row=row, column=0, sticky="w")
-    entry = ttk.Entry(left_panel, textvariable=var)
-    entry.grid(row=row, column=1)
-    fields[key] = var
+for key in ["num_nodes", "max_input_buffer", "max_injection_buffer", "packet_rate", "traffic_stop_time"]:
+    ttk.Label(left_panel, text=key.replace("_", " ").title()).grid(row=row, column=0, sticky="w")
+    ttk.Entry(left_panel, textvariable=fields[key]).grid(row=row, column=1)
     row += 1
 
 ttk.Label(left_panel, text="Routing Strategy").grid(row=row, column=0, sticky="w")
 ttk.Combobox(left_panel, textvariable=routing_var, values=["deflection", "clockwise"]).grid(row=row, column=1)
+row += 1
+
+ttk.Checkbutton(left_panel, text="Log Deliveries", variable=fields["log_deliveries"]).grid(row=row, columnspan=2, sticky="w")
+row += 1
+
+ttk.Label(left_panel, text="Size Distribution Mode").grid(row=row, column=0, sticky="w")
+ttk.Combobox(left_panel, textvariable=size_mode_var, values=["custom", "random"]).grid(row=row, column=1)
+row += 1
+
+for label, key in [("Small Packet %", "size_small"), ("Medium Packet %", "size_medium"), ("Large Packet %", "size_large")]:
+    ttk.Label(left_panel, text=label).grid(row=row, column=0, sticky="w")
+    ttk.Entry(left_panel, textvariable=fields[key]).grid(row=row, column=1)
+    row += 1
+
+ttk.Label(left_panel, text="Traffic Distribution").grid(row=row, column=0, sticky="w")
+ttk.Combobox(left_panel, textvariable=traffic_distribution_var, values=["balanced", "unbalanced"]).grid(row=row, column=1)
 row += 1
 
 def run():
@@ -72,7 +91,10 @@ def run():
         "packet_rate": fields["packet_rate"].get(),
         "traffic_stop_time": fields["traffic_stop_time"].get(),
         "log_deliveries": fields["log_deliveries"].get(),
-        "export_log_filename": "results/delivery_log.csv"
+        "export_log_filename": "results/delivery_log.csv",
+        "size_distribution_mode": size_mode_var.get(),
+        "size_distribution": [fields["size_small"].get(), fields["size_medium"].get(), fields["size_large"].get()],
+        "traffic_distribution": traffic_distribution_var.get()
     }
 
     results = run_simulation(config)
@@ -85,9 +107,13 @@ def run():
     results_box.insert(tk.END, f"Average Hops: {results['avg_hops']}\n")
     results_box.insert(tk.END, f"Deflections: {results['deflections']}\n")
     results_box.insert(tk.END, f"Dropped Packets: {results['drops']}\n")
+    results_box.insert(tk.END, f"Runtime (seconds): {results['runtime_seconds']}\n")
+    results_box.insert(tk.END, f"Peak Memory Usage (KB): {results['peak_memory_kb']}\n")
+
     if results['logged']:
         results_box.insert(tk.END, f"Log saved to: {config['export_log_filename']}\n")
     results_box.configure(state="disabled")
+
 
 def show_plots():
     for widget in scrollable_frame.winfo_children():
@@ -99,7 +125,8 @@ def show_plots():
             get_hop_histogram(deliveries),
             get_latency_vs_hops(deliveries),
             get_latency_cdf(deliveries),
-            get_per_packet_hops(deliveries)
+            get_per_packet_hops(deliveries),
+            get_deliveries_per_node(deliveries)
         ]
         for fig in figures:
             fig.set_size_inches(5.5, 2.5)
