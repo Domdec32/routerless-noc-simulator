@@ -1,4 +1,5 @@
 import random
+import json
 from core.event import Event
 from models.packet import Packet
 
@@ -13,12 +14,48 @@ class TrafficGenerator:
         self.packet_size_distribution = config.get("packet_size_distribution", {"small": 1.0})
         self.traffic_distribution = config.get("traffic_distribution", "balanced")
         self.packet_id_counter = 0
+        self.packet_templates = []
+
+        if "packet_template_file" in self.config:
+            self._load_packet_templates(self.config["packet_template_file"])
+
+    def _load_packet_templates(self, filepath):
+        with open(filepath, "r") as f:
+            self.packet_templates = json.load(f)
+        print(f"[DEBUG] Loaded {len(self.packet_templates)} packet templates from {filepath}")
 
     def schedule_traffic(self):
         time = self.start_time
-        while time < self.stop_time:
-            self._schedule_single_packet(time)
-            time += 1 / self.packet_rate
+
+        if self.packet_templates:
+            for packet_info in self.packet_templates:
+                self._schedule_packet_from_template(packet_info, time)
+                time += 1 / self.packet_rate
+        else:
+            while time < self.stop_time:
+                self._schedule_single_packet(time)
+                time += 1 / self.packet_rate
+
+    def _schedule_packet_from_template(self, packet_info, time):
+        src_node = next(node for node in self.nodes if str(node.node_id) == str(packet_info["src"]))
+        dest_node = next(node for node in self.nodes if str(node.node_id) == str(packet_info["dest"]))
+
+        packet = Packet(
+            packet_id=packet_info["packet_id"],
+            src=src_node.node_id,
+            dest=dest_node.node_id,
+            creation_time=time,
+            size=packet_info["size"]
+        )
+
+        def inject():
+            #print(f"[DEBUG] Injecting packet {packet.packet_id} at node {src_node.node_id}")
+            src_node.inject_packet(packet)
+
+        description = f"Inject Packet({packet.packet_id}) from {packet.src} to {packet.dest}"
+        delay = packet.get_delay()
+        scheduled_time = time + delay
+        self.event_queue.schedule(Event(scheduled_time, inject, description))
 
     def _schedule_single_packet(self, time):
         src = random.choice(self.nodes)

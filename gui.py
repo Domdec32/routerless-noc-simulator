@@ -53,6 +53,7 @@ fields = {
 routing_var = tk.StringVar(value="deflection")
 size_mode_var = tk.StringVar(value="custom")
 traffic_distribution_var = tk.StringVar(value="balanced")
+use_packet_template_var = tk.BooleanVar(value=False)
 
 row = 0
 for key in ["num_nodes", "max_input_buffer", "max_injection_buffer", "packet_rate", "traffic_stop_time"]:
@@ -80,6 +81,9 @@ ttk.Label(left_panel, text="Traffic Distribution").grid(row=row, column=0, stick
 ttk.Combobox(left_panel, textvariable=traffic_distribution_var, values=["balanced", "unbalanced"]).grid(row=row, column=1)
 row += 1
 
+ttk.Checkbutton(left_panel, text="Use Packet Templates", variable=use_packet_template_var).grid(row=row, columnspan=2, sticky="w")
+row += 1
+
 def run():
     global config, results
     config = {
@@ -97,6 +101,9 @@ def run():
         "traffic_distribution": traffic_distribution_var.get()
     }
 
+    if use_packet_template_var.get():
+        config["packet_template_file"] = "packet_templates.json"
+
     results = run_simulation(config)
 
     results_box.configure(state="normal")
@@ -113,7 +120,6 @@ def run():
     if results['logged']:
         results_box.insert(tk.END, f"Log saved to: {config['export_log_filename']}\n")
     results_box.configure(state="disabled")
-
 
 def show_plots():
     for widget in scrollable_frame.winfo_children():
@@ -149,3 +155,4 @@ ttk.Button(left_panel, text="Show Plots", command=show_plots).grid(row=row, colu
 row += 1
 
 root.mainloop()
+

@@ -7,7 +7,7 @@ from models.topology import build_ring_topology
 from routing.deflection import DeflectionRouting
 from routing.clockwise import ClockwiseRouting
 
-def run_tick_simulation(config):
+def run_tick_simulation(config, debug=True):
     num_nodes = config["num_nodes"]
     max_ticks = config["traffic_stop_time"]
 
@@ -33,16 +33,35 @@ def run_tick_simulation(config):
         nodes=nodes,
         packet_rate=config["packet_rate"],
         stop_time=max_ticks,
-        config=config
+        config=config,
+        debug=debug
     )
-    traffic.schedule_traffic()
 
     tracemalloc.start()
     start_time = time.time()
 
     for tick in range(max_ticks):
+
+        traffic.inject_packets_at_tick(tick)
         for node in nodes:
-            node.tick(tick)
+            node.tick(tick, debug=debug)
+
+        for node in nodes:
+            node.input_buffer += node.next_input_buffer
+            node.next_input_buffer = []
+    
+
+    drain_tick = max_ticks
+
+
+    for node in nodes:
+        node.tick(drain_tick, debug=debug)
+
+    for node in nodes:
+        node.input_buffer += node.next_input_buffer
+        node.next_input_buffer = []
+
+
 
     end_time = time.time()
     current, peak = tracemalloc.get_traced_memory()
@@ -55,8 +74,7 @@ def run_tick_simulation(config):
         for packet, delivered_at in node.delivered:
             if delivered_at >= packet.creation_time:
                 metrics.record_packet_delivery(packet, delivered_at)
-            else:
-                #print(f"[Warning] Packet {packet.packet_id} delivered before creation time! Skipping.")
+
 
         metrics.deflections += node.deflections
         metrics.dropped_packets += node.dropped

@@ -60,6 +60,8 @@ def run_simulation(config):
         config=config
     )
     traffic.schedule_traffic()
+    print(f"[DEBUG] Number of events scheduled in EventQueue: {len(eq.queue)}")
+
 
     tracemalloc.start()
     start_time = time.time()
